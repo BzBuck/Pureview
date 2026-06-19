@@ -16,154 +16,131 @@
 
   :root {
     --cyan:       #00E5FF;
-    --cyan-dim:   rgba(0,229,255,0.55);
-    --cyan-faint: rgba(0,229,255,0.10);
+    --cyan-dim:   rgba(0,229,255,0.75);
+    --cyan-faint: rgba(0,229,255,0.12);
     --warn:       #FF6B35;
-    --panel:      rgba(0,0,0,0.54);
-    --border:     rgba(0,229,255,0.25);
-    --text:       rgba(0,229,255,0.92);
-    --text-dim:   rgba(0,229,255,0.42);
+    --panel:      rgba(0,0,0,0.65);
+    --border:     rgba(0,229,255,0.35);
+    --text:       rgba(0,229,255,0.95);
+    --text-dim:   rgba(0,229,255,0.68);
     --font:       'Courier New', monospace;
   }
 
   html, body {
     width:100%; height:100%;
-    background: transparent;
+    background: #0a0e0f;
     overflow:hidden;
     font-family: var(--font);
     color: var(--text);
   }
 
-  /* scanline atmosphere */
   body::before {
     content:'';
     position:fixed; inset:0;
     background: repeating-linear-gradient(
       0deg, transparent, transparent 3px,
-      rgba(0,229,255,0.016) 3px, rgba(0,229,255,0.016) 4px
+      rgba(0,229,255,0.018) 3px, rgba(0,229,255,0.018) 4px
     );
     pointer-events:none; z-index:9000;
   }
 
-  /* ── HUD GRID ── */
+  /* ── HUD GRID ──
+     Rows: top stats | middle empty | bottom widgets
+     Cols: left widget | center (empty) | right widget
+  */
   #hud {
     position:fixed; inset:0;
     display:grid;
     grid-template-columns: auto 1fr auto;
     grid-template-rows: auto 1fr auto;
-    padding: 12px 16px;
+    padding: 12px 14px 14px;
+    gap: 0;
   }
 
-  /* ── Shared panel ── */
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 3px;
     padding: 6px 10px;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px);
   }
 
   .lbl {
     font-size:7.5px; letter-spacing:.18em;
     color:var(--text-dim); text-transform:uppercase;
-    display:block; margin-bottom:2px;
+    display:block; margin-bottom:3px;
   }
-  .val   { font-size:15px; font-weight:bold; line-height:1; letter-spacing:.04em; }
-  .val-sm{ font-size:11px; line-height:1.35; letter-spacing:.03em; }
+  .val { font-size:15px; font-weight:bold; line-height:1; letter-spacing:.04em; }
 
-  /* ── TOP LEFT: compass ── */
-  #top-left { grid-column:1; grid-row:1; align-self:start; }
-  #compass-panel { display:flex; align-items:center; gap:10px; }
-
-  #tape-wrap {
-    width:80px; height:26px;
-    overflow:hidden; position:relative;
-  }
-  #tape-svg { position:absolute; left:0; top:0; width:800px; height:26px; }
-  #tape-cursor {
-    position:absolute; left:50%; top:0;
-    transform:translateX(-50%);
-    width:1.5px; height:100%;
-    background: var(--cyan);
-    pointer-events:none;
+  /* ════════════════════════════════
+     TOP ROW — stat bar spans all 3 cols
+  ════════════════════════════════ */
+  #top-bar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    align-items: stretch;
   }
 
-  #dir-big {
-    font-size:28px; font-weight:bold;
-    line-height:1; letter-spacing:-.02em;
-    text-shadow: 0 0 12px var(--cyan);
+  .stat-block {
+    display:flex; flex-direction:column; align-items:center;
+    padding: 5px 14px;
   }
-  #hdg-deg { font-size:10px; color:var(--text-dim); letter-spacing:.1em; }
 
-  /* ── TOP CENTER: temp ── */
-  #top-center {
-    grid-column:2; grid-row:1;
-    display:flex; justify-content:center; align-items:flex-start;
-    padding-top:2px;
+  .stat-block .lbl { text-align:center; }
+
+  .stat-val {
+    font-size:20px; font-weight:bold;
+    line-height:1; letter-spacing:.04em;
+    text-shadow: 0 0 10px var(--cyan);
+    white-space:nowrap;
   }
-  #temp-panel { display:flex; align-items:baseline; gap:5px; }
-  #temp-val   { font-size:18px; font-weight:bold; }
-  #temp-unit  { font-size:10px; color:var(--text-dim); }
 
-  /* ── TOP RIGHT: clock ── */
-  #top-right {
-    grid-column:3; grid-row:1;
-    display:flex; flex-direction:column; align-items:flex-end; gap:5px;
+  .stat-unit {
+    font-size:9px; color:var(--text-dim);
+    letter-spacing:.1em; margin-left:3px;
   }
-  #time-panel { text-align:right; }
-  #clock      { font-size:26px; font-weight:bold; letter-spacing:.06em; line-height:1; text-shadow:0 0 10px var(--cyan); }
-  #date-str   { font-size:9px; color:var(--text-dim); letter-spacing:.12em; margin-top:2px; }
 
-  /* ── MIDDLE (empty) ── */
-  #mid-left  { grid-column:1; grid-row:2; }
-  #mid-center{ grid-column:2; grid-row:2; }
-  #mid-right { grid-column:3; grid-row:2; }
+  /* dividers between stat blocks */
+  .stat-div {
+    width:1px; background:var(--border);
+    margin: 4px 0;
+    align-self:stretch;
+  }
 
-  /* ── BOTTOM LEFT: camera ── */
+  /* ════════════════════════════════
+     MIDDLE ROW — empty
+  ════════════════════════════════ */
+  #mid { grid-column:1/-1; grid-row:2; }
+
+  /* ════════════════════════════════
+     BOTTOM ROW
+  ════════════════════════════════ */
   #bottom-left {
     grid-column:1; grid-row:3;
-    display:flex; flex-direction:column; align-items:flex-start; gap:3px;
+    display:flex; flex-direction:column;
+    align-items:flex-start; gap:4px;
     align-self:end;
   }
-  #cam-wrapper {
-    position:relative; width:128px; height:96px;
-    border:1px solid var(--border); border-radius:3px;
-    overflow:hidden; background:#000;
-  }
-  #cam-feed { width:100%; height:100%; object-fit:cover; display:block; }
-  #cam-wrapper::before, #cam-wrapper::after {
-    content:''; position:absolute;
-    width:9px; height:9px;
-    border-color:var(--cyan); border-style:solid; opacity:.7; z-index:2;
-  }
-  #cam-wrapper::before { top:3px; left:3px;   border-width:1.5px 0 0 1.5px; }
-  #cam-wrapper::after  { bottom:3px; right:3px; border-width:0 1.5px 1.5px 0; }
-  #cam-status {
-    position:absolute; top:4px; right:6px;
-    font-size:7px; letter-spacing:.1em; color:var(--cyan); z-index:3;
-  }
-  #cam-status.offline { color:var(--warn); }
-  #cam-label { font-size:7px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; }
 
-  /* ── BOTTOM CENTER: speed ── */
   #bottom-center {
     grid-column:2; grid-row:3;
-    display:flex; justify-content:center; align-items:flex-end; padding-bottom:1px;
+    /* empty — keeps layout balanced */
   }
-  #speed-val   { font-size:32px; font-weight:bold; letter-spacing:-.02em; text-shadow:0 0 14px var(--cyan); }
-  #speed-unit  { font-size:10px; color:var(--text-dim); letter-spacing:.12em; }
-  #speed-inner { display:flex; align-items:baseline; gap:4px; }
 
-  /* ── BOTTOM RIGHT: map + location + elev ── */
   #bottom-right {
     grid-column:3; grid-row:3;
-    display:flex; flex-direction:column; align-items:flex-end; gap:5px;
+    display:flex; flex-direction:column;
+    align-items:flex-end; gap:4px;
     align-self:end;
   }
 
+  /* ── MAP (bottom-left) ── */
   #map-panel {
     position:relative;
-    width:200px; height:150px;
+    width:190px; height:150px;
     border:1px solid var(--border); border-radius:3px;
     overflow:hidden; background:#0a0f0f;
     cursor:pointer;
@@ -173,105 +150,123 @@
   #map-panel::after {
     content:'';
     position:absolute; inset:0;
-    background: linear-gradient(
-      to bottom,
-      rgba(0,229,255,0.04) 0%,
-      transparent 40%,
-      rgba(0,0,0,0.18) 100%
-    );
+    background:linear-gradient(to bottom,
+      rgba(0,229,255,0.04) 0%, transparent 40%, rgba(0,0,0,0.15) 100%);
     pointer-events:none; z-index:500;
   }
 
   .map-corner {
     position:absolute; width:9px; height:9px;
-    border-color:var(--cyan); border-style:solid; opacity:.65; z-index:600;
-    pointer-events:none;
+    border-color:var(--cyan); border-style:solid;
+    opacity:.7; z-index:600; pointer-events:none;
   }
-  .mc-tl { top:3px;    left:3px;  border-width:1.5px 0 0 1.5px; }
+  .mc-tl { top:3px; left:3px;   border-width:1.5px 0 0 1.5px; }
   .mc-br { bottom:3px; right:3px; border-width:0 1.5px 1.5px 0; }
 
   #map-mode {
     position:absolute; bottom:5px; left:6px;
     font-size:7px; letter-spacing:.15em; color:var(--cyan);
     text-transform:uppercase; z-index:600;
-    background:rgba(0,0,0,0.55); padding:1px 4px; border-radius:2px;
+    background:rgba(0,0,0,0.6); padding:1px 5px; border-radius:2px;
     pointer-events:none;
   }
 
-  #map-crosshair {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    width:10px; height:10px; z-index:600; pointer-events:none;
+  #map-label {
+    font-size:7px; letter-spacing:.2em;
+    color:var(--text-dim); text-transform:uppercase;
   }
-  #map-crosshair::before, #map-crosshair::after {
-    content:''; position:absolute; background:var(--cyan); opacity:.9;
-  }
-  #map-crosshair::before { width:1px; height:100%; left:50%; transform:translateX(-50%); top:0; }
-  #map-crosshair::after  { height:1px; width:100%; top:50%; transform:translateY(-50%); left:0; }
 
+  /* ── LOCATION (above map) ── */
   #loc-panel { text-align:right; }
-  #loc-neighborhood { font-size:13px; font-weight:bold; line-height:1; letter-spacing:.02em; }
+  #loc-neighborhood { font-size:12px; font-weight:bold; line-height:1; letter-spacing:.02em; }
   #loc-city { font-size:9px; color:var(--text-dim); letter-spacing:.1em; margin-top:2px; }
 
-  #elev-panel { text-align:right; }
+  /* ── CAMERA (bottom-left) ── */
+  #cam-wrapper {
+    position:relative; width:190px; height:150px;
+    border:1px solid var(--border); border-radius:3px;
+    overflow:hidden; background:#000;
+  }
+  #cam-feed { width:100%; height:100%; object-fit:cover; display:block; }
 
+  #cam-wrapper::before, #cam-wrapper::after {
+    content:''; position:absolute;
+    width:9px; height:9px;
+    border-color:var(--cyan); border-style:solid; opacity:.7; z-index:2;
+  }
+  #cam-wrapper::before { top:3px; left:3px;   border-width:1.5px 0 0 1.5px; }
+  #cam-wrapper::after  { bottom:3px; right:3px; border-width:0 1.5px 1.5px 0; }
+
+  #cam-status {
+    position:absolute; top:4px; right:6px;
+    font-size:7px; letter-spacing:.1em; color:var(--cyan); z-index:3;
+  }
+  #cam-status.offline { color:var(--warn); }
+
+  #cam-label {
+    position:absolute; bottom:5px; left:6px;
+    font-size:7px; letter-spacing:.15em; color:var(--cyan);
+    text-transform:uppercase; z-index:3;
+    background:rgba(0,0,0,0.6); padding:1px 5px; border-radius:2px;
+    pointer-events:none;
+  }
+
+  /* live dot */
   .live-dot {
     display:inline-block; width:5px; height:5px; border-radius:50%;
-    background:var(--cyan); margin-right:4px;
+    background:var(--cyan); margin-right:3px;
     animation:pulse 2s ease-in-out infinite; vertical-align:middle;
+    position:relative; top:-1px;
   }
   @keyframes pulse {
     0%,100%{ opacity:1; box-shadow:0 0 4px var(--cyan); }
     50%    { opacity:.3; box-shadow:none; }
   }
 
+  /* ── Leaflet overrides ── */
   .leaflet-control-zoom,
   .leaflet-control-attribution { display:none !important; }
-  .leaflet-tile { filter: brightness(0.72) saturate(0.5) hue-rotate(155deg); }
+  .leaflet-tile { filter:brightness(0.72) saturate(0.5) hue-rotate(155deg); }
+  .leaflet-tile.sat-tile { filter:brightness(0.82) saturate(0.65) !important; }
 
-  /* ── Init screen ── */
+  /* ── Direction marker (Google Maps style) ── */
+  .dir-marker-wrap {
+    position:relative;
+    width:60px; height:60px;
+    /* centered via iconAnchor */
+  }
+  /* The cone is a conic-gradient fan rendered in a canvas — see JS */
+
+  /* ── Init overlay ── */
   #perm-overlay {
-    position:fixed; inset:0;
-    background:#000;
+    position:fixed; inset:0; background:#000;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
-    gap:16px; z-index:9999;
+    gap:14px; z-index:9999;
     text-align:center; padding:32px;
   }
-
   #pv-wordmark {
     font-size:28px; font-weight:bold;
     letter-spacing:.35em; text-transform:uppercase;
-    text-shadow: 0 0 24px var(--cyan);
-    margin-bottom:4px;
+    text-shadow:0 0 24px var(--cyan);
   }
-
   #pv-sub {
     font-size:9px; letter-spacing:.25em;
     color:var(--text-dim); text-transform:uppercase;
-    margin-top:-10px;
+    margin-top:-8px;
   }
-
   #perm-overlay p {
     font-size:10px; color:var(--text-dim);
     max-width:260px; line-height:1.8; letter-spacing:.06em;
-    border-top:1px solid var(--border);
-    padding-top:14px;
+    border-top:1px solid var(--border); padding-top:14px;
   }
-
   #perm-btn {
     background:none; border:1px solid var(--cyan);
     color:var(--cyan); font-family:var(--font); font-size:11px;
     letter-spacing:.25em; text-transform:uppercase;
-    padding:11px 28px; cursor:pointer; border-radius:3px;
-    margin-top:4px;
-    transition: background .15s, box-shadow .15s;
+    padding:11px 28px; cursor:pointer; border-radius:3px; margin-top:4px;
   }
-  #perm-btn:active {
-    background:var(--cyan-faint);
-    box-shadow: 0 0 12px rgba(0,229,255,0.3);
-  }
-
+  #perm-btn:active { background:var(--cyan-faint); }
   #perm-err { font-size:9px; color:var(--warn); letter-spacing:.1em; margin-top:4px; }
 </style>
 </head>
@@ -287,173 +282,162 @@
 
 <div id="hud" style="display:none;">
 
-  <!-- TOP LEFT: Compass -->
-  <div id="top-left">
-    <div class="panel" id="compass-panel">
-      <div id="tape-wrap">
-        <svg id="tape-svg" viewBox="0 0 800 26" xmlns="http://www.w3.org/2000/svg"></svg>
-        <div id="tape-cursor"></div>
+  <!-- TOP: stat bar -->
+  <div id="top-bar">
+    <div class="panel stat-block">
+      <span class="lbl">Time</span>
+      <div style="display:flex;align-items:baseline;">
+        <span id="clock" class="stat-val">--:--</span>
+        <span id="ampm" class="stat-unit">--</span>
       </div>
-      <div>
-        <div class="lbl">HDG</div>
-        <div id="dir-big">N</div>
-        <div id="hdg-deg">000°</div>
+      <div id="date-str" style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-top:3px;">--- -- ----</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="panel stat-block">
+      <span class="lbl">Temp</span>
+      <div style="display:flex;align-items:baseline;">
+        <span id="temp-val" class="stat-val">--</span>
+        <span class="stat-unit">°F</span>
+      </div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="panel stat-block">
+      <span class="lbl">Elevation</span>
+      <div style="display:flex;align-items:baseline;">
+        <span id="elev-val" class="stat-val">--</span>
+        <span class="stat-unit">ft</span>
+      </div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="panel stat-block">
+      <span class="lbl">Speed</span>
+      <div style="display:flex;align-items:baseline;">
+        <span id="speed-val" class="stat-val">0</span>
+        <span class="stat-unit">mph</span>
       </div>
     </div>
   </div>
 
-  <!-- TOP CENTER: Temp -->
-  <div id="top-center">
-    <div class="panel" id="temp-panel">
-      <span class="lbl">AMBIENT</span>
-      <span id="temp-val" class="val">--</span>
-      <span id="temp-unit">°F</span>
-    </div>
-  </div>
+  <!-- MIDDLE: empty -->
+  <div id="mid"></div>
 
-  <!-- TOP RIGHT: Clock -->
-  <div id="top-right">
-    <div class="panel" id="time-panel">
-      <div class="lbl">LOCAL TIME</div>
-      <div id="clock">--:--:--</div>
-      <div id="date-str">--- -- ----</div>
-    </div>
-  </div>
-
-  <div id="mid-left"></div>
-  <div id="mid-center"></div>
-  <div id="mid-right"></div>
-
-  <!-- BOTTOM LEFT: Camera -->
+  <!-- BOTTOM LEFT: camera -->
   <div id="bottom-left">
     <div id="cam-wrapper">
       <video id="cam-feed" autoplay playsinline muted></video>
       <div id="cam-status" class="offline">NO FEED</div>
-    </div>
-    <div id="cam-label">
-      <span class="live-dot" id="cam-dot" style="display:none;"></span>CAM · REAR
-    </div>
-  </div>
-
-  <!-- BOTTOM CENTER: Speed -->
-  <div id="bottom-center">
-    <div class="panel">
-      <div class="lbl">SPEED</div>
-      <div id="speed-inner">
-        <span id="speed-val" class="val">0</span>
-        <span id="speed-unit">MPH</span>
+      <div id="cam-label">
+        <span class="live-dot" id="cam-dot" style="display:none;"></span>CAM · REAR
       </div>
     </div>
   </div>
 
-  <!-- BOTTOM RIGHT: Map + Location + Elev -->
+  <!-- BOTTOM CENTER: empty -->
+  <div id="bottom-center"></div>
+
+  <!-- BOTTOM RIGHT: location + map -->
   <div id="bottom-right">
+    <div class="panel" id="loc-panel">
+      <div class="lbl">Location</div>
+      <div id="loc-neighborhood" class="val">Locating…</div>
+      <div id="loc-city"></div>
+    </div>
     <div id="map-panel" onclick="toggleMapMode()">
       <div id="map"></div>
       <div class="map-corner mc-tl"></div>
       <div class="map-corner mc-br"></div>
-      <div id="map-crosshair"></div>
       <div id="map-mode">STREET</div>
-    </div>
-    <div class="panel" id="loc-panel">
-      <div class="lbl">LOCATION</div>
-      <div id="loc-neighborhood" class="val">LOCATING…</div>
-      <div id="loc-city">---</div>
-    </div>
-    <div class="panel" id="elev-panel">
-      <div class="lbl">ELEVATION</div>
-      <div id="elev-val" class="val">-- ft</div>
     </div>
   </div>
 
 </div>
 
 <script>
+// ═══════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════
 const MS_TO_MPH = 2.23694;
 const M_TO_FT   = 3.28084;
-let map, marker, streetLayer, satLayer;
+
+// ═══════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════
+let map, streetLayer, satLayer, dirMarker;
 let mapMode = 'street';
+let currentHeading = 0;
 let lastGeocode = 0;
 let weatherFetched = false;
 
-// ── Clock ──────────────────────────────────────
+// ═══════════════════════════════════════
+//  CLOCK — 12hr
+// ═══════════════════════════════════════
 function updateClock() {
-  const n = new Date(), p = v => String(v).padStart(2,'0');
-  document.getElementById('clock').textContent =
-    `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())}`;
+  const n = new Date();
+  let h = n.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const m = String(n.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}`;
+  document.getElementById('ampm').textContent = ampm;
+
   const D=['SUN','MON','TUE','WED','THU','FRI','SAT'];
   const M=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   document.getElementById('date-str').textContent =
-    `${D[n.getDay()]} ${p(n.getDate())} ${M[n.getMonth()]} ${n.getFullYear()}`;
+    `${D[n.getDay()]} ${String(n.getDate()).padStart(2,'0')} ${M[n.getMonth()]}`;
 }
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── Compass tape ───────────────────────────────
-(function buildTape() {
-  const LABELS = ['N','NE','E','SE','S','SW','W','NW'];
-  const STEP = 50;
-  const svg = document.getElementById('tape-svg');
-  for (let cycle = 0; cycle < 3; cycle++) {
-    LABELS.forEach((lbl, i) => {
-      const tx = cycle * LABELS.length * STEP + i * STEP + 25;
-      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-      line.setAttribute('x1',tx); line.setAttribute('y1',18);
-      line.setAttribute('x2',tx); line.setAttribute('y2',26);
-      line.setAttribute('stroke', lbl==='N' ? '#00E5FF' : 'rgba(0,229,255,0.35)');
-      line.setAttribute('stroke-width', lbl==='N' ? '2' : '1');
-      svg.appendChild(line);
-      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
-      text.setAttribute('x',tx); text.setAttribute('y',13);
-      text.setAttribute('text-anchor','middle');
-      text.setAttribute('font-family','Courier New');
-      text.setAttribute('font-size', lbl==='N' ? '9' : '7');
-      text.setAttribute('fill', lbl==='N' ? 'rgba(0,229,255,0.95)' : 'rgba(0,229,255,0.45)');
-      text.textContent = lbl;
-      svg.appendChild(text);
-    });
-  }
-})();
+// ═══════════════════════════════════════
+//  MAP
+// ═══════════════════════════════════════
+function buildDirectionMarker(heading) {
+  const size = 70;
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  const cx = size / 2, cy = size / 2;
+  const r = size / 2;
 
-function updateCompass(deg) {
-  const DIRS = ['N','NE','E','SE','S','SW','W','NW'];
-  document.getElementById('dir-big').textContent = DIRS[Math.round(deg/45)%8];
-  document.getElementById('hdg-deg').textContent = String(Math.round(deg)).padStart(3,'0')+'°';
-  const wrapWidth = 80;
-  const totalOffset = 400 - (wrapWidth/2) + deg * (50/45);
-  document.getElementById('tape-svg').style.left = `-${totalOffset}px`;
-}
-updateCompass(0);
+  // Cone: ~60° fan in direction of heading
+  // heading is degrees clockwise from north
+  // canvas 0° = right, so we offset by -90°
+  const headRad = (heading - 90) * Math.PI / 180;
+  const spread = 35 * Math.PI / 180; // half-angle of cone
 
-// ── Orientation ────────────────────────────────
-function initOrientation() {
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission()
-      .then(r => { if (r==='granted') bindOrientation(); })
-      .catch(() => {});
-  } else {
-    bindOrientation();
-  }
+  // Gradient from center outward
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0,   'rgba(0,180,255,0.55)');
+  grad.addColorStop(0.5, 'rgba(0,180,255,0.25)');
+  grad.addColorStop(1,   'rgba(0,180,255,0.0)');
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, r, headRad - spread, headRad + spread);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,229,255,0.95)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,229,255,0.4)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  return c.toDataURL();
 }
 
-function bindOrientation() {
-  const evt = 'ondeviceorientationabsolute' in window
-    ? 'deviceorientationabsolute' : 'deviceorientation';
-  window.addEventListener(evt, e => {
-    let deg = null;
-    if (e.webkitCompassHeading != null) deg = e.webkitCompassHeading;
-    else if (e.alpha != null) deg = (360 - e.alpha) % 360;
-    if (deg !== null) updateCompass(deg);
-  }, true);
-}
-
-// ── Map ────────────────────────────────────────
 function initMap() {
   map = L.map('map', {
     zoomControl:false, attributionControl:false,
-    dragging:false, touchZoom:false, scrollWheelZoom:false,
-    doubleClickZoom:false, keyboard:false, tap:false, zoom:16
+    dragging:false, touchZoom:false,
+    scrollWheelZoom:false, doubleClickZoom:false,
+    keyboard:false, tap:false, zoom:16
   });
 
   streetLayer = L.tileLayer(
@@ -466,46 +450,135 @@ function initMap() {
     { maxZoom:19 }
   );
 
-  map.setView([0,0], 16);
-
-  marker = L.marker([0,0], {
-    icon: L.divIcon({
-      html:`<div style="width:10px;height:10px;border-radius:50%;background:rgba(0,229,255,0.9);box-shadow:0 0 0 3px rgba(0,229,255,0.25),0 0 8px rgba(0,229,255,0.6);"></div>`,
-      iconSize:[10,10], iconAnchor:[5,5], className:''
-    })
-  }).addTo(map);
+  map.setView([0, 0], 16);
+  createDirMarker(0, 0, 0);
 }
 
-function toggleMapMode() {
-  if (mapMode==='street') {
-    mapMode='sat';
-    map.removeLayer(streetLayer);
-    satLayer.addTo(map);
-    document.getElementById('map-mode').textContent='SAT';
-    document.querySelectorAll('.leaflet-tile').forEach(t =>
-      t.style.filter='brightness(0.8) saturate(0.7)'
-    );
-  } else {
-    mapMode='street';
-    map.removeLayer(satLayer);
-    streetLayer.addTo(map);
-    document.getElementById('map-mode').textContent='STREET';
-    document.querySelectorAll('.leaflet-tile').forEach(t =>
-      t.style.filter='brightness(0.72) saturate(0.5) hue-rotate(155deg)'
-    );
-  }
+function createDirMarker(lat, lon, heading) {
+  if (dirMarker) map.removeLayer(dirMarker);
+  const imgData = buildDirectionMarker(heading);
+  const icon = L.icon({
+    iconUrl: imgData,
+    iconSize: [70, 70],
+    iconAnchor: [35, 35]
+  });
+  dirMarker = L.marker([lat, lon], { icon, interactive:false }).addTo(map);
+}
+
+function updateMarkerHeading(heading) {
+  if (!dirMarker) return;
+  const ll = dirMarker.getLatLng();
+  createDirMarker(ll.lat, ll.lng, heading);
 }
 
 function updateMap(lat, lon) {
   const ll = L.latLng(lat, lon);
-  map.setView(ll, map.getZoom(), { animate:true, duration:0.8 });
-  marker.setLatLng(ll);
+  map.setView(ll, map.getZoom(), { animate:true, duration:0.6 });
+  createDirMarker(lat, lon, currentHeading);
 }
 
-// ── Reverse geocode ────────────────────────────
+function toggleMapMode() {
+  if (mapMode === 'street') {
+    mapMode = 'sat';
+    map.removeLayer(streetLayer);
+    satLayer.addTo(map);
+    document.getElementById('map-mode').textContent = 'SAT';
+    document.querySelectorAll('.leaflet-tile').forEach(t => {
+      t.classList.add('sat-tile');
+    });
+  } else {
+    mapMode = 'street';
+    map.removeLayer(satLayer);
+    streetLayer.addTo(map);
+    document.getElementById('map-mode').textContent = 'STREET';
+    document.querySelectorAll('.leaflet-tile').forEach(t => {
+      t.classList.remove('sat-tile');
+    });
+  }
+}
+
+// ═══════════════════════════════════════
+//  ORIENTATION → heading cone
+// ═══════════════════════════════════════
+let headingUpdateTimer = null;
+
+function initOrientation() {
+  // iOS requires explicit permission request triggered by user gesture
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(state => {
+        if (state === 'granted') bindOrientation();
+      })
+      .catch(() => {});
+  } else {
+    bindOrientation();
+  }
+}
+
+function bindOrientation() {
+  // Prefer absolute orientation (Android); fall back to relative (iOS via webkitCompassHeading)
+  if ('ondeviceorientationabsolute' in window) {
+    window.addEventListener('deviceorientationabsolute', onOrient, true);
+  }
+  // Always also listen to deviceorientation for iOS webkitCompassHeading
+  window.addEventListener('deviceorientation', onOrient, true);
+}
+
+function onOrient(e) {
+  let deg = null;
+  if (e.webkitCompassHeading != null) {
+    // iOS — directly gives magnetic north heading
+    deg = e.webkitCompassHeading;
+  } else if (e.absolute && e.alpha != null) {
+    deg = (360 - e.alpha) % 360;
+  } else if (e.alpha != null) {
+    deg = (360 - e.alpha) % 360;
+  }
+  if (deg === null) return;
+
+  currentHeading = deg;
+
+  // Throttle marker redraws to ~10fps
+  if (headingUpdateTimer) return;
+  headingUpdateTimer = setTimeout(() => {
+    headingUpdateTimer = null;
+    updateMarkerHeading(currentHeading);
+  }, 100);
+}
+
+// ═══════════════════════════════════════
+//  GEOLOCATION
+// ═══════════════════════════════════════
+function initGeo() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(pos => {
+    const { latitude:lat, longitude:lon, altitude, speed } = pos.coords;
+
+    document.getElementById('speed-val').textContent =
+      speed !== null ? Math.round(speed * MS_TO_MPH) : '0';
+
+    if (altitude !== null)
+      document.getElementById('elev-val').textContent =
+        Math.round(altitude * M_TO_FT);
+
+    updateMap(lat, lon);
+    reverseGeocode(lat, lon);
+    if (!weatherFetched) { weatherFetched = true; fetchWeather(lat, lon); }
+
+  }, () => {}, {
+    enableHighAccuracy: true,
+    maximumAge: 1000,
+    timeout: 15000
+  });
+}
+
+// ═══════════════════════════════════════
+//  REVERSE GEOCODE
+// ═══════════════════════════════════════
 async function reverseGeocode(lat, lon) {
   const now = Date.now();
-  if (now - lastGeocode < 10000) return;
+  if (now - lastGeocode < 12000) return;
   lastGeocode = now;
   try {
     const res = await fetch(
@@ -514,18 +587,22 @@ async function reverseGeocode(lat, lon) {
     );
     const data = await res.json();
     const a = data.address || {};
-    const hood = a.neighbourhood||a.suburb||a.quarter||a.residential||a.village||a.town||a.hamlet||'—';
-    const city = a.city||a.county||a.state_district||a.state||'—';
+    const hood = a.neighbourhood || a.suburb || a.quarter ||
+                 a.residential || a.village || a.town || a.hamlet || '—';
+    const city = a.city || a.county || a.state || '—';
     document.getElementById('loc-neighborhood').textContent = hood.toUpperCase();
     document.getElementById('loc-city').textContent = city.toUpperCase();
   } catch(e) {}
 }
 
-// ── Weather ────────────────────────────────────
+// ═══════════════════════════════════════
+//  WEATHER
+// ═══════════════════════════════════════
 async function fetchWeather(lat, lon) {
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&temperature_unit=fahrenheit&forecast_days=1`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m&temperature_unit=fahrenheit&forecast_days=1`
     );
     const data = await res.json();
     document.getElementById('temp-val').textContent =
@@ -533,23 +610,9 @@ async function fetchWeather(lat, lon) {
   } catch(e) {}
 }
 
-// ── Geolocation ────────────────────────────────
-function initGeo() {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.watchPosition(pos => {
-    const { latitude:lat, longitude:lon, altitude, speed } = pos.coords;
-    document.getElementById('speed-val').textContent =
-      speed !== null ? Math.round(speed * MS_TO_MPH) : '0';
-    if (altitude !== null)
-      document.getElementById('elev-val').textContent =
-        `${Math.round(altitude * M_TO_FT)} ft`;
-    updateMap(lat, lon);
-    reverseGeocode(lat, lon);
-    if (!weatherFetched) { weatherFetched=true; fetchWeather(lat, lon); }
-  }, () => {}, { enableHighAccuracy:true, maximumAge:1000, timeout:15000 });
-}
-
-// ── Camera ─────────────────────────────────────
+// ═══════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════
 async function initCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -565,30 +628,41 @@ async function initCamera() {
   }
 }
 
-// ── Wake lock ──────────────────────────────────
+// ═══════════════════════════════════════
+//  WAKE LOCK
+// ═══════════════════════════════════════
 async function wakeLock() {
-  try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch(e) {}
+  try {
+    if ('wakeLock' in navigator)
+      await navigator.wakeLock.request('screen');
+  } catch(e) {}
 }
 
-// ── Init ───────────────────────────────────────
+// ═══════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════
 async function initHUD() {
   const btn = document.getElementById('perm-btn');
   btn.textContent = 'Initializing…';
   btn.disabled = true;
+
   try {
     document.getElementById('perm-overlay').style.display = 'none';
     document.getElementById('hud').style.display = 'grid';
+
     initMap();
     await initCamera();
     initGeo();
-    initOrientation();
+    initOrientation(); // called after user gesture — required for iOS
     wakeLock();
+
     try {
       if (document.documentElement.requestFullscreen)
         await document.documentElement.requestFullscreen();
       if (screen.orientation && screen.orientation.lock)
-        await screen.orientation.lock('landscape').catch(()=>{});
+        await screen.orientation.lock('landscape').catch(() => {});
     } catch(e) {}
+
   } catch(e) {
     document.getElementById('perm-overlay').style.display = 'flex';
     const err = document.getElementById('perm-err');
