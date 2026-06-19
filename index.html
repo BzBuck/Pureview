@@ -19,8 +19,8 @@
     --cyan-dim:   rgba(0,229,255,0.75);
     --cyan-faint: rgba(0,229,255,0.12);
     --warn:       #FF6B35;
-    --panel:      rgba(0,0,0,0.65);
-    --border:     rgba(0,229,255,0.35);
+    --panel:      rgba(0,0,0,0.75);
+    --border:     rgba(0,229,255,0.30);
     --text:       rgba(0,229,255,0.95);
     --text-dim:   rgba(0,229,255,0.68);
     --font:       'Courier New', monospace;
@@ -28,20 +28,10 @@
 
   html, body {
     width:100%; height:100%;
-    background: #0a0e0f;
+    background: #000000;
     overflow:hidden;
     font-family: var(--font);
     color: var(--text);
-  }
-
-  body::before {
-    content:'';
-    position:fixed; inset:0;
-    background: repeating-linear-gradient(
-      0deg, transparent, transparent 3px,
-      rgba(0,229,255,0.018) 3px, rgba(0,229,255,0.018) 4px
-    );
-    pointer-events:none; z-index:9000;
   }
 
   /* ── HUD GRID ──
@@ -176,10 +166,39 @@
     color:var(--text-dim); text-transform:uppercase;
   }
 
-  /* ── LOCATION (above map) ── */
-  #loc-panel { text-align:right; }
-  #loc-neighborhood { font-size:12px; font-weight:bold; line-height:1; letter-spacing:.02em; }
-  #loc-city { font-size:9px; color:var(--text-dim); letter-spacing:.1em; margin-top:2px; }
+  /* ── LOCATION overlay inside map ── */
+  #loc-overlay {
+    position:absolute; top:5px; right:6px;
+    z-index:600; pointer-events:none;
+    text-align:right;
+  }
+  #loc-neighborhood {
+    font-size:10px; font-weight:bold;
+    color:rgba(0,229,255,0.95); letter-spacing:.06em;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+    line-height:1.2;
+  }
+  #loc-city {
+    font-size:8px; color:rgba(0,229,255,0.65);
+    letter-spacing:.1em;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  }
+
+  /* shrink stat values to be more compact */
+  .stat-val { font-size:16px; }
+  .stat-unit { font-size:8px; }
+  .stat-block { padding:4px 10px; }
+
+  /* ── Orientation fallback button ── */
+  #orient-btn {
+    position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+    background:none; border:1px solid var(--border);
+    color:var(--text-dim); font-family:var(--font); font-size:7px;
+    letter-spacing:.18em; text-transform:uppercase;
+    padding:4px 12px; cursor:pointer; border-radius:3px;
+    z-index:8000; opacity:0.7;
+    display:none;
+  }
 
   /* ── CAMERA (bottom-left) ── */
   #cam-wrapper {
@@ -285,12 +304,11 @@
   <!-- TOP: stat bar -->
   <div id="top-bar">
     <div class="panel stat-block">
-      <span class="lbl">Time</span>
+      <div id="date-str" class="lbl" style="margin-bottom:2px;">--- -- ----</div>
       <div style="display:flex;align-items:baseline;">
         <span id="clock" class="stat-val">--:--</span>
         <span id="ampm" class="stat-unit">--</span>
       </div>
-      <div id="date-str" style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-top:3px;">--- -- ----</div>
     </div>
     <div class="stat-div"></div>
     <div class="panel stat-block">
@@ -302,7 +320,7 @@
     </div>
     <div class="stat-div"></div>
     <div class="panel stat-block">
-      <span class="lbl">Elevation</span>
+      <span class="lbl">Elev</span>
       <div style="display:flex;align-items:baseline;">
         <span id="elev-val" class="stat-val">--</span>
         <span class="stat-unit">ft</span>
@@ -320,6 +338,7 @@
 
   <!-- MIDDLE: empty -->
   <div id="mid"></div>
+  <button id="orient-btn" onclick="requestOrientPermission()">Enable compass</button>
 
   <!-- BOTTOM LEFT: camera -->
   <div id="bottom-left">
@@ -335,18 +354,17 @@
   <!-- BOTTOM CENTER: empty -->
   <div id="bottom-center"></div>
 
-  <!-- BOTTOM RIGHT: location + map -->
+  <!-- BOTTOM RIGHT: map (location overlaid inside) -->
   <div id="bottom-right">
-    <div class="panel" id="loc-panel">
-      <div class="lbl">Location</div>
-      <div id="loc-neighborhood" class="val">Locating…</div>
-      <div id="loc-city"></div>
-    </div>
     <div id="map-panel" onclick="toggleMapMode()">
       <div id="map"></div>
       <div class="map-corner mc-tl"></div>
       <div class="map-corner mc-br"></div>
       <div id="map-mode">STREET</div>
+      <div id="loc-overlay">
+        <div id="loc-neighborhood">LOCATING…</div>
+        <div id="loc-city"></div>
+      </div>
     </div>
   </div>
 
@@ -501,35 +519,55 @@ function toggleMapMode() {
 //  ORIENTATION → heading cone
 // ═══════════════════════════════════════
 let headingUpdateTimer = null;
+let orientBound = false;
 
 function initOrientation() {
-  // iOS requires explicit permission request triggered by user gesture
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ — must be called from a user gesture
     DeviceOrientationEvent.requestPermission()
       .then(state => {
-        if (state === 'granted') bindOrientation();
+        if (state === 'granted') {
+          bindOrientation();
+        } else {
+          document.getElementById('orient-btn').style.display = 'block';
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        document.getElementById('orient-btn').style.display = 'block';
+      });
   } else {
+    // Android / non-iOS — no permission API needed
     bindOrientation();
   }
 }
 
+function requestOrientPermission() {
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(state => {
+        if (state === 'granted') {
+          bindOrientation();
+          document.getElementById('orient-btn').style.display = 'none';
+        }
+      })
+      .catch(() => {});
+  }
+}
+
 function bindOrientation() {
-  // Prefer absolute orientation (Android); fall back to relative (iOS via webkitCompassHeading)
+  if (orientBound) return;
+  orientBound = true;
   if ('ondeviceorientationabsolute' in window) {
     window.addEventListener('deviceorientationabsolute', onOrient, true);
   }
-  // Always also listen to deviceorientation for iOS webkitCompassHeading
   window.addEventListener('deviceorientation', onOrient, true);
 }
 
 function onOrient(e) {
   let deg = null;
   if (e.webkitCompassHeading != null) {
-    // iOS — directly gives magnetic north heading
-    deg = e.webkitCompassHeading;
+    deg = e.webkitCompassHeading; // iOS: true magnetic north heading
   } else if (e.absolute && e.alpha != null) {
     deg = (360 - e.alpha) % 360;
   } else if (e.alpha != null) {
