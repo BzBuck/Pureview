@@ -3,7 +3,7 @@
 
 A minimal AR heads-up display designed for wearable glasses. Everything visible has a purpose.
 
-**[Launch PureView →](https://BzBuck.github.io/pureview)**
+**[Launch PureView →](https://BzBuck.github.io/Pureview)**
 
 ---
 
