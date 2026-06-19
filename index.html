@@ -263,24 +263,7 @@
     pointer-events:none;
   }
 
-  #rec-btn {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text);
-    font-family: var(--font);
-    cursor: pointer;
-    -webkit-tap-highlight-color: rgba(255,51,51,0.2);
-  }
-  #rec-btn:active { background: rgba(255,51,51,0.15); }
-  #rec-dot {
-    position:absolute; top:4px; left:6px;
-    width:6px; height:6px; border-radius:50%;
-    background:#ff3333;
-    box-shadow: 0 0 6px rgba(255,50,50,0.9);
-    z-index:4; display:none;
-    animation:pulse-red 1.2s ease-in-out infinite;
-  }
+  /* (legacy rec-dot/rec-btn removed — replaced by snapshot system) */
   @keyframes pulse-red {
     0%,100%{ opacity:1; }
     50%    { opacity:0.3; }
@@ -430,13 +413,13 @@
     color: var(--cyan);
   }
   .lens-btn:disabled { opacity: 0.4; cursor: default; }
-  #rec-btn {
+  #snap-btn {
     display: flex;
     align-items: center;
     gap: 10px;
     background: none;
-    border: 1px solid rgba(255,51,51,0.4);
-    color: rgba(255,51,51,0.7);
+    border: 1px solid var(--border);
+    color: var(--cyan);
     font-family: var(--font);
     font-size: 10px;
     letter-spacing: .2em;
@@ -446,45 +429,36 @@
     cursor: pointer;
     align-self: flex-start;
     transition: all .15s;
-    -webkit-tap-highlight-color: rgba(255,51,51,0.15);
+    -webkit-tap-highlight-color: rgba(0,229,255,0.15);
   }
-  #rec-btn.recording {
-    border-color: #ff3333;
-    color: #ff3333;
-  }
-  #rec-dot-btn {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: rgba(255,51,51,0.5);
-    flex-shrink: 0;
-  }
-  #rec-btn.recording #rec-dot-btn {
-    background: #ff3333;
-    box-shadow: 0 0 6px rgba(255,51,51,0.9);
-    animation: pulse-red 1.2s ease-in-out infinite;
-  }
+  #snap-btn:active { background: rgba(0,229,255,0.12); }
 
-  #clip-list {
+  #snap-list {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-top: 4px;
   }
-  .clip-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 10px;
-    letter-spacing: .06em;
-    color: var(--text);
-    text-decoration: none;
-    padding: 6px 10px;
+  .snap-item {
+    width: 64px; height: 48px;
     border: 1px solid var(--border);
     border-radius: 3px;
-    background: rgba(0,229,255,0.04);
+    overflow: hidden;
+    position: relative;
+    background: #000;
   }
-  .clip-item:active { background: rgba(0,229,255,0.12); }
-  .clip-size { color: var(--text-dim); font-size: 9px; }
+  .snap-item img { width:100%; height:100%; object-fit:cover; display:block; }
+  .snap-item a {
+    position:absolute; inset:0;
+    display:flex; align-items:flex-end; justify-content:flex-end;
+    text-decoration:none;
+  }
+  .snap-save-tag {
+    font-size: 6px; letter-spacing:.1em; color: var(--cyan);
+    background: rgba(0,0,0,0.7); padding: 1px 3px;
+    margin: 2px;
+  }
+
   #settings-backdrop {
     display: none;
     position: fixed;
@@ -492,15 +466,6 @@
     z-index: 7999;
   }
   #settings-backdrop.open { display: block; }
-
-  /* ── ID wrappers for stat blocks (for toggle targeting) ── */
-  #time-block, #temp-block, #elev-block, #speed-block {
-    display: contents; /* invisible wrapper, children still participate in flex */
-  }
-  #time-block.hidden, #temp-block.hidden,
-  #elev-block.hidden, #speed-block.hidden {
-    display: none;
-  }
 
   #perm-err { font-size:9px; color:var(--warn); letter-spacing:.1em; margin-top:4px; }
 </style>
@@ -635,14 +600,11 @@
       </div>
     </div>
 
-    <button id="rec-btn" onclick="toggleRecording()">
-      <div id="rec-dot-btn"></div>
-      <span id="rec-label">START RECORDING</span>
+    <button id="snap-btn" onclick="takeSnapshot()">
+      📷 <span>Take Photo</span>
     </button>
 
-    <div id="clip-list">
-      <span class="s-label" style="opacity:.5;">No clips yet</span>
-    </div>
+    <div id="snap-list"></div>
   </div>
 </div>
 
@@ -958,24 +920,21 @@ function toggleWidget(btn) {
 }
 // ═══════════════════════════════════════
 let camStream = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let isRecording = false;
 let availableLenses = [];
 let currentLensId = null;
+let snapshots = []; // { url }
 
 async function initCamera() {
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:{ ideal:'environment' }, width:1280, height:720 },
-      audio:true
+      audio:false
     });
     document.getElementById('cam-feed').srcObject = camStream;
     document.getElementById('cam-status').textContent = 'LIVE';
     document.getElementById('cam-status').classList.remove('offline');
     document.getElementById('cam-dot').style.display = 'inline-block';
 
-    // Remember which device we landed on
     const track = camStream.getVideoTracks()[0];
     currentLensId = track.getSettings().deviceId || null;
 
@@ -988,7 +947,6 @@ async function initCamera() {
 async function enumerateLenses() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    // Rear-facing cameras only — label hints vary by browser/OS
     availableLenses = devices.filter(d =>
       d.kind === 'videoinput' &&
       !/front|user|face/i.test(d.label)
@@ -1029,10 +987,9 @@ async function switchLens(deviceId, btnEl) {
   try {
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: deviceId }, width:1280, height:720 },
-      audio: true
+      audio: false
     });
 
-    // Stop old tracks, swap in new stream
     if (camStream) camStream.getTracks().forEach(t => t.stop());
     camStream = newStream;
     document.getElementById('cam-feed').srcObject = camStream;
@@ -1040,77 +997,46 @@ async function switchLens(deviceId, btnEl) {
 
     document.querySelectorAll('.lens-btn').forEach(b => b.classList.remove('active'));
     btnEl.classList.add('active');
-
-    // If recording was active, it needs to be restarted on the new stream
-    if (isRecording) {
-      stopRecording();
-      startRecording();
-    }
   } catch(e) {
     console.warn('Lens switch failed', e);
   }
 }
 
-let recordedClips = []; // { url, name, size }
+// ── SNAPSHOT (canvas-based — no MediaRecorder, no iOS flakiness) ──
+function takeSnapshot() {
+  const video = document.getElementById('cam-feed');
+  if (!video || !video.videoWidth) return;
 
-function toggleRecording() {
-  if (!camStream) return;
-  if (!isRecording) startRecording();
-  else stopRecording();
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const url = canvas.toDataURL('image/jpeg', 0.92);
+  snapshots.unshift({ url });
+  renderSnapshotList();
+
+  // Quick visual confirmation flash
+  const btn = document.getElementById('snap-btn');
+  btn.style.borderColor = 'var(--cyan)';
+  setTimeout(() => { btn.style.borderColor = ''; }, 200);
 }
 
-function startRecording() {
-  recordedChunks = [];
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : MediaRecorder.isTypeSupported('video/webm')
-    ? 'video/webm'
-    : 'video/mp4';
-
-  try {
-    mediaRecorder = new MediaRecorder(camStream, { mimeType });
-  } catch(e) {
-    mediaRecorder = new MediaRecorder(camStream);
-  }
-
-  mediaRecorder.ondataavailable = e => {
-    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-  };
-
-  mediaRecorder.onstop = () => {
-    // IMPORTANT: never touch camStream here — recorder is a separate
-    // consumer of the tracks, stopping it must not affect the live feed.
-    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
-    const url  = URL.createObjectURL(blob);
-    const ts   = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-    recordedClips.push({ url, name: `Clip · ${ts}`, size: blob.size });
-    renderClipList();
-  };
-
-  mediaRecorder.start(1000);
-  isRecording = true;
-  document.getElementById('rec-btn').classList.add('recording');
-  document.getElementById('rec-label').textContent = 'STOP RECORDING';
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-  isRecording = false;
-  document.getElementById('rec-btn').classList.remove('recording');
-  document.getElementById('rec-label').textContent = 'START RECORDING';
-}
-
-function renderClipList() {
-  const list = document.getElementById('clip-list');
+function renderSnapshotList() {
+  const list = document.getElementById('snap-list');
   if (!list) return;
-  if (recordedClips.length === 0) {
-    list.innerHTML = '<span class="s-label" style="opacity:.5;">No clips yet</span>';
+  if (snapshots.length === 0) {
+    list.innerHTML = '<span class="s-label" style="opacity:.5;">No photos yet</span>';
     return;
   }
-  list.innerHTML = recordedClips.map((clip, i) => `
-    <a href="${clip.url}" download="pureview-${i}.webm" class="clip-item">
-      ▸ ${clip.name} <span class="clip-size">${(clip.size/1024/1024).toFixed(1)}MB</span>
-    </a>
+  list.innerHTML = snapshots.map((snap, i) => `
+    <div class="snap-item">
+      <img src="${snap.url}" alt="snapshot ${i}">
+      <a href="${snap.url}" download="pureview-${i}.jpg">
+        <span class="snap-save-tag">SAVE</span>
+      </a>
+    </div>
   `).join('');
 }
 
