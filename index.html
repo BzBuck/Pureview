@@ -230,7 +230,21 @@
     pointer-events:none;
   }
 
-  /* live dot */
+  /* rec dot */
+  #rec-dot {
+    position:absolute; top:4px; left:6px;
+    width:6px; height:6px; border-radius:50%;
+    background:#ff3333;
+    box-shadow: 0 0 6px rgba(255,50,50,0.9);
+    z-index:4; display:none;
+    animation:pulse-red 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse-red {
+    0%,100%{ opacity:1; }
+    50%    { opacity:0.3; }
+  }
+
+  #cam-wrapper { cursor:pointer; }
   .live-dot {
     display:inline-block; width:5px; height:5px; border-radius:50%;
     background:var(--cyan); margin-right:3px;
@@ -342,8 +356,9 @@
 
   <!-- BOTTOM LEFT: camera -->
   <div id="bottom-left">
-    <div id="cam-wrapper">
+    <div id="cam-wrapper" onclick="toggleRecording()">
       <video id="cam-feed" autoplay playsinline muted></video>
+      <div id="rec-dot"></div>
       <div id="cam-status" class="offline">NO FEED</div>
       <div id="cam-label">
         <span class="live-dot" id="cam-dot" style="display:none;"></span>CAM · REAR
@@ -409,7 +424,7 @@ updateClock();
 // ═══════════════════════════════════════
 //  MAP
 // ═══════════════════════════════════════
-function buildDirectionMarker(heading) {
+function buildDirectionMarker(heading, sat) {
   const size = 70;
   const c = document.createElement('canvas');
   c.width = size; c.height = size;
@@ -417,17 +432,20 @@ function buildDirectionMarker(heading) {
   const cx = size / 2, cy = size / 2;
   const r = size / 2;
 
-  // Cone: ~60° fan in direction of heading
-  // heading is degrees clockwise from north
-  // canvas 0° = right, so we offset by -90°
   const headRad = (heading - 90) * Math.PI / 180;
-  const spread = 35 * Math.PI / 180; // half-angle of cone
+  const spread = 35 * Math.PI / 180;
 
-  // Gradient from center outward
+  // Gradient from center outward — brighter in satellite mode
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  grad.addColorStop(0,   'rgba(0,180,255,0.55)');
-  grad.addColorStop(0.5, 'rgba(0,180,255,0.25)');
-  grad.addColorStop(1,   'rgba(0,180,255,0.0)');
+  if (sat) {
+    grad.addColorStop(0,   'rgba(0,180,255,0.90)');
+    grad.addColorStop(0.5, 'rgba(0,180,255,0.55)');
+    grad.addColorStop(1,   'rgba(0,180,255,0.0)');
+  } else {
+    grad.addColorStop(0,   'rgba(0,180,255,0.55)');
+    grad.addColorStop(0.5, 'rgba(0,180,255,0.25)');
+    grad.addColorStop(1,   'rgba(0,180,255,0.0)');
+  }
 
   ctx.beginPath();
   ctx.moveTo(cx, cy);
@@ -474,7 +492,7 @@ function initMap() {
 
 function createDirMarker(lat, lon, heading) {
   if (dirMarker) map.removeLayer(dirMarker);
-  const imgData = buildDirectionMarker(heading);
+  const imgData = buildDirectionMarker(heading, mapMode === 'sat');
   const icon = L.icon({
     iconUrl: imgData,
     iconSize: [70, 70],
@@ -501,18 +519,16 @@ function toggleMapMode() {
     map.removeLayer(streetLayer);
     satLayer.addTo(map);
     document.getElementById('map-mode').textContent = 'SAT';
-    document.querySelectorAll('.leaflet-tile').forEach(t => {
-      t.classList.add('sat-tile');
-    });
+    document.querySelectorAll('.leaflet-tile').forEach(t => t.classList.add('sat-tile'));
   } else {
     mapMode = 'street';
     map.removeLayer(satLayer);
     streetLayer.addTo(map);
     document.getElementById('map-mode').textContent = 'STREET';
-    document.querySelectorAll('.leaflet-tile').forEach(t => {
-      t.classList.remove('sat-tile');
-    });
+    document.querySelectorAll('.leaflet-tile').forEach(t => t.classList.remove('sat-tile'));
   }
+  // Redraw cone with updated opacity for new mode
+  if (dirMarker) updateMarkerHeading(currentHeading);
 }
 
 // ═══════════════════════════════════════
@@ -649,21 +665,76 @@ async function fetchWeather(lat, lon) {
 }
 
 // ═══════════════════════════════════════
-//  CAMERA
+//  CAMERA + RECORDING
 // ═══════════════════════════════════════
+let camStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+
 async function initCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ ideal:'environment' }, width:320, height:240 },
-      audio:false
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ ideal:'environment' }, width:1280, height:720 },
+      audio:true
     });
-    document.getElementById('cam-feed').srcObject = stream;
+    document.getElementById('cam-feed').srcObject = camStream;
     document.getElementById('cam-status').textContent = 'LIVE';
     document.getElementById('cam-status').classList.remove('offline');
     document.getElementById('cam-dot').style.display = 'inline-block';
   } catch(e) {
     document.getElementById('cam-status').textContent = 'NO FEED';
   }
+}
+
+function toggleRecording() {
+  if (!camStream) return;
+  if (!isRecording) startRecording();
+  else stopRecording();
+}
+
+function startRecording() {
+  recordedChunks = [];
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9'
+    : MediaRecorder.isTypeSupported('video/webm')
+    ? 'video/webm'
+    : 'video/mp4';
+
+  try {
+    mediaRecorder = new MediaRecorder(camStream, { mimeType });
+  } catch(e) {
+    mediaRecorder = new MediaRecorder(camStream);
+  }
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const url  = URL.createObjectURL(blob);
+    const ext  = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const ts   = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `pureview-${ts}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  mediaRecorder.start(1000); // collect in 1s chunks
+  isRecording = true;
+  document.getElementById('rec-dot').style.display = 'block';
+  document.getElementById('cam-status').textContent = 'REC';
+  document.getElementById('cam-status').style.color = '#ff3333';
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  isRecording = false;
+  document.getElementById('rec-dot').style.display = 'none';
+  document.getElementById('cam-status').textContent = 'LIVE';
+  document.getElementById('cam-status').style.color = '';
 }
 
 // ═══════════════════════════════════════
