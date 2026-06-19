@@ -111,6 +111,24 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  #settings-gear {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font);
+    -webkit-tap-highlight-color: rgba(0,229,255,0.2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  #settings-gear:active { color: var(--cyan); }
+  #gear-icon {
+    font-size: 20px;
+    line-height: 1;
+    color: var(--text);
+    display: block;
+    margin-top: 1px;
+  }
+
   /* ════════════════════════════════
      BOTTOM ROW
   ════════════════════════════════ */
@@ -486,10 +504,15 @@
         <span class="stat-unit">mph</span>
       </div>
     </div>
+    <div class="stat-div"></div>
+    <button id="settings-gear" class="panel stat-block" onclick="openSettings()">
+      <span class="lbl">Menu</span>
+      <span id="gear-icon">⚙</span>
+    </button>
   </div>
 
-  <!-- MIDDLE: long-press zone to open settings -->
-  <div id="mid" id="longpress-zone"></div>
+  <!-- MIDDLE: empty -->
+  <div id="mid"></div>
   <button id="orient-btn" onclick="requestOrientPermission()">Enable compass</button>
 
   <!-- BOTTOM LEFT: camera -->
@@ -849,27 +872,6 @@ async function fetchWeather(lat, lon) {
 // ═══════════════════════════════════════
 //  SETTINGS
 // ═══════════════════════════════════════
-let longPressTimer = null;
-const LONG_PRESS_MS = 600;
-
-function initLongPress() {
-  const zone = document.getElementById('mid');
-
-  const start = () => {
-    longPressTimer = setTimeout(openSettings, LONG_PRESS_MS);
-  };
-  const cancel = () => {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-  };
-
-  zone.addEventListener('touchstart', start,  { passive:true });
-  zone.addEventListener('touchend',   cancel, { passive:true });
-  zone.addEventListener('touchmove',  cancel, { passive:true });
-  zone.addEventListener('mousedown',  start);
-  zone.addEventListener('mouseup',    cancel);
-  zone.addEventListener('mouseleave', cancel);
-}
-
 function openSettings() {
   document.getElementById('settings-panel').classList.add('open');
   document.getElementById('settings-backdrop').classList.add('open');
@@ -990,7 +992,6 @@ async function initHUD() {
     await initCamera();
     initGeo();
     initOrientation();
-    initLongPress();
     wakeLock();
 
     try {
