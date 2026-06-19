@@ -14,6 +14,16 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
 
+  button {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+  }
+
   :root {
     --cyan:       #00E5FF;
     --cyan-dim:   rgba(0,229,255,0.75);
@@ -112,21 +122,14 @@
   }
 
   #settings-gear {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
     cursor: pointer;
     font-family: var(--font);
     -webkit-tap-highlight-color: rgba(0,229,255,0.2);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  #settings-gear:active { color: var(--cyan); }
+  #settings-gear:active #gear-icon { color: var(--cyan); }
   #gear-icon {
-    font-size: 20px;
-    line-height: 1;
-    color: var(--text);
-    display: block;
-    margin-top: 1px;
+    font-size: 18px;
+    text-shadow: none;
   }
 
   /* ════════════════════════════════
@@ -406,6 +409,27 @@
     background: var(--border);
     margin: 0 -20px;
   }
+
+  #lens-row { display: flex; flex-direction: column; }
+  #lens-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .lens-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--font);
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .lens-btn.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  .lens-btn:disabled { opacity: 0.4; cursor: default; }
   #rec-btn {
     display: flex;
     align-items: center;
@@ -439,6 +463,28 @@
     box-shadow: 0 0 6px rgba(255,51,51,0.9);
     animation: pulse-red 1.2s ease-in-out infinite;
   }
+
+  #clip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .clip-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    letter-spacing: .06em;
+    color: var(--text);
+    text-decoration: none;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: rgba(0,229,255,0.04);
+  }
+  .clip-item:active { background: rgba(0,229,255,0.12); }
+  .clip-size { color: var(--text-dim); font-size: 9px; }
   #settings-backdrop {
     display: none;
     position: fixed;
@@ -507,7 +553,9 @@
     <div class="stat-div"></div>
     <button id="settings-gear" class="panel stat-block" onclick="openSettings()">
       <span class="lbl">Menu</span>
-      <span id="gear-icon">⚙</span>
+      <div style="display:flex;align-items:baseline;">
+        <span id="gear-icon" class="stat-val">⚙</span>
+      </div>
     </button>
   </div>
 
@@ -580,10 +628,21 @@
 
     <div id="settings-divider"></div>
 
+    <div id="lens-row">
+      <span class="s-label" style="margin-bottom:6px;display:block;">Camera Lens</span>
+      <div id="lens-buttons">
+        <button class="lens-btn" disabled>Detecting…</button>
+      </div>
+    </div>
+
     <button id="rec-btn" onclick="toggleRecording()">
       <div id="rec-dot-btn"></div>
       <span id="rec-label">START RECORDING</span>
     </button>
+
+    <div id="clip-list">
+      <span class="s-label" style="opacity:.5;">No clips yet</span>
+    </div>
   </div>
 </div>
 
@@ -902,6 +961,8 @@ let camStream = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let isRecording = false;
+let availableLenses = [];
+let currentLensId = null;
 
 async function initCamera() {
   try {
@@ -913,10 +974,84 @@ async function initCamera() {
     document.getElementById('cam-status').textContent = 'LIVE';
     document.getElementById('cam-status').classList.remove('offline');
     document.getElementById('cam-dot').style.display = 'inline-block';
+
+    // Remember which device we landed on
+    const track = camStream.getVideoTracks()[0];
+    currentLensId = track.getSettings().deviceId || null;
+
+    await enumerateLenses();
   } catch(e) {
     document.getElementById('cam-status').textContent = 'NO FEED';
   }
 }
+
+async function enumerateLenses() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    // Rear-facing cameras only — label hints vary by browser/OS
+    availableLenses = devices.filter(d =>
+      d.kind === 'videoinput' &&
+      !/front|user|face/i.test(d.label)
+    );
+
+    const container = document.getElementById('lens-buttons');
+    container.innerHTML = '';
+
+    if (availableLenses.length <= 1) {
+      container.innerHTML = '<button class="lens-btn" disabled>Single lens only</button>';
+      return;
+    }
+
+    availableLenses.forEach(lens => {
+      const btn = document.createElement('button');
+      btn.className = 'lens-btn' + (lens.deviceId === currentLensId ? ' active' : '');
+      btn.textContent = labelForLens(lens.label);
+      btn.onclick = () => switchLens(lens.deviceId, btn);
+      container.appendChild(btn);
+    });
+  } catch(e) {
+    document.getElementById('lens-buttons').innerHTML =
+      '<button class="lens-btn" disabled>Unavailable</button>';
+  }
+}
+
+function labelForLens(label) {
+  const l = label.toLowerCase();
+  if (l.includes('ultra')) return 'Ultra Wide';
+  if (l.includes('wide')) return 'Wide';
+  if (l.includes('tele')) return 'Telephoto';
+  if (l.includes('back') || l.includes('rear')) return 'Standard';
+  return 'Lens ' + (availableLenses.findIndex(x => x.label === label) + 1);
+}
+
+async function switchLens(deviceId, btnEl) {
+  if (deviceId === currentLensId) return;
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId }, width:1280, height:720 },
+      audio: true
+    });
+
+    // Stop old tracks, swap in new stream
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = newStream;
+    document.getElementById('cam-feed').srcObject = camStream;
+    currentLensId = deviceId;
+
+    document.querySelectorAll('.lens-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+
+    // If recording was active, it needs to be restarted on the new stream
+    if (isRecording) {
+      stopRecording();
+      startRecording();
+    }
+  } catch(e) {
+    console.warn('Lens switch failed', e);
+  }
+}
+
+let recordedClips = []; // { url, name, size }
 
 function toggleRecording() {
   if (!camStream) return;
@@ -943,14 +1078,13 @@ function startRecording() {
   };
 
   mediaRecorder.onstop = () => {
+    // IMPORTANT: never touch camStream here — recorder is a separate
+    // consumer of the tracks, stopping it must not affect the live feed.
     const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
     const url  = URL.createObjectURL(blob);
-    const ext  = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
-    const ts   = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `pureview-${ts}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const ts   = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    recordedClips.push({ url, name: `Clip · ${ts}`, size: blob.size });
+    renderClipList();
   };
 
   mediaRecorder.start(1000);
@@ -964,6 +1098,20 @@ function stopRecording() {
   isRecording = false;
   document.getElementById('rec-btn').classList.remove('recording');
   document.getElementById('rec-label').textContent = 'START RECORDING';
+}
+
+function renderClipList() {
+  const list = document.getElementById('clip-list');
+  if (!list) return;
+  if (recordedClips.length === 0) {
+    list.innerHTML = '<span class="s-label" style="opacity:.5;">No clips yet</span>';
+    return;
+  }
+  list.innerHTML = recordedClips.map((clip, i) => `
+    <a href="${clip.url}" download="pureview-${i}.webm" class="clip-item">
+      ▸ ${clip.name} <span class="clip-size">${(clip.size/1024/1024).toFixed(1)}MB</span>
+    </a>
+  `).join('');
 }
 
 // ═══════════════════════════════════════
