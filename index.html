@@ -478,9 +478,10 @@
 
   #version-tag {
     position: fixed;
-    bottom: 8px; right: 10px;
+    bottom: 8px; left: 50%;
+    transform: translateX(-50%);
     font-size: 7px; letter-spacing: .15em;
-    color: rgba(0,229,255,0.25);
+    color: rgba(0,229,255,0.35);
     z-index: 500;
     pointer-events: none;
   }
@@ -621,7 +622,7 @@
   <div id="mid"></div>
   <div id="listening-indicator">LISTENING</div>
   <div id="cmd-toast"></div>
-  <div id="version-tag">PureView v0.11.0</div>
+  <div id="version-tag">PureView v0.13.0</div>
   <button id="orient-btn" onclick="requestOrientPermission()">Enable compass</button>
 
   <!-- BOTTOM LEFT: camera -->
