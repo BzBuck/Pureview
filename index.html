@@ -11,6 +11,8 @@
 <title>PureView</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
 
@@ -237,6 +239,13 @@
     user-select:none; -webkit-user-select:none;
   }
   #cam-feed    { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+  #detect-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
   #cam-status  { pointer-events:none; }
   #cam-label   { pointer-events:none; }
   #rec-dot     { pointer-events:none; }
@@ -467,7 +476,91 @@
   }
   #settings-backdrop.open { display: block; }
 
+  #version-tag {
+    position: fixed;
+    bottom: 8px; right: 10px;
+    font-size: 7px; letter-spacing: .15em;
+    color: rgba(0,229,255,0.25);
+    z-index: 500;
+    pointer-events: none;
+  }
+
   #perm-err { font-size:9px; color:var(--warn); letter-spacing:.1em; margin-top:4px; }
+
+  /* ── Voice control ── */
+  #listening-indicator {
+    position: fixed;
+    bottom: 8px; left: 10px;
+    font-size: 7px; letter-spacing: .2em;
+    color: var(--text-dim);
+    z-index: 500;
+    display: none;
+    align-items: center;
+    gap: 5px;
+  }
+  #listening-indicator.active { display: flex; }
+  #listening-indicator::before {
+    content: '';
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--cyan);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  #cmd-toast {
+    position: fixed;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    font-size: 10px; letter-spacing: .1em;
+    color: var(--cyan);
+    background: rgba(0,0,0,0.75);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 3px;
+    z-index: 6000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s, transform .25s;
+    white-space: nowrap;
+  }
+  #cmd-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  #voice-row { display: flex; flex-direction: column; gap: 6px; }
+  #voice-toggle-btn {
+    display: flex; align-items: center; gap: 10px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 10px;
+    letter-spacing: .08em;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: all .15s;
+  }
+  #voice-toggle-btn.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  #voice-toggle-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+  }
+  #voice-toggle-btn.active #voice-toggle-dot {
+    background: var(--cyan);
+    box-shadow: 0 0 6px rgba(0,229,255,0.8);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  #voice-hint {
+    font-size: 8px; color: var(--text-dim);
+    letter-spacing: .04em; line-height: 1.5;
+    max-width: 280px;
+  }
 </style>
 </head>
 <body>
@@ -526,12 +619,16 @@
 
   <!-- MIDDLE: empty -->
   <div id="mid"></div>
+  <div id="listening-indicator">LISTENING</div>
+  <div id="cmd-toast"></div>
+  <div id="version-tag">PureView v0.11.0</div>
   <button id="orient-btn" onclick="requestOrientPermission()">Enable compass</button>
 
   <!-- BOTTOM LEFT: camera -->
   <div id="bottom-left">
     <div id="cam-wrapper">
       <video id="cam-feed" autoplay playsinline muted></video>
+      <canvas id="detect-canvas"></canvas>
       <div id="rec-dot"></div>
       <div id="cam-status" class="offline">NO FEED</div>
       <div id="cam-label">
@@ -605,6 +702,17 @@
     </button>
 
     <div id="snap-list"></div>
+
+    <div id="settings-divider"></div>
+
+    <div id="voice-row">
+      <span class="s-label" style="margin-bottom:6px;display:block;">Voice Control</span>
+      <button id="voice-toggle-btn" onclick="toggleVoiceControl()">
+        <span id="voice-toggle-dot"></span>
+        <span id="voice-toggle-label">Enable "PureView" wake word</span>
+      </button>
+      <div id="voice-hint">Say "PureView" then a command, e.g. "PureView satellite"</div>
+    </div>
   </div>
 </div>
 
@@ -939,9 +1047,111 @@ async function initCamera() {
     currentLensId = track.getSettings().deviceId || null;
 
     await enumerateLenses();
+    startDetection(); // kick off COCO-SSD once camera is confirmed live
   } catch(e) {
     document.getElementById('cam-status').textContent = 'NO FEED';
   }
+}
+
+// ── OBJECT DETECTION ─────────────────────────────────────
+let cocoModel = null;
+let detectionRunning = false;
+let detectionFrameId = null;
+
+async function startDetection() {
+  if (detectionRunning) return;
+  detectionRunning = true;
+
+  // Load model (cached after first download)
+  if (!cocoModel) {
+    try {
+      cocoModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+    } catch(e) {
+      detectionRunning = false;
+      return;
+    }
+  }
+
+  const video  = document.getElementById('cam-feed');
+  const canvas = document.getElementById('detect-canvas');
+  const ctx    = canvas.getContext('2d');
+
+  async function detect() {
+    if (!detectionRunning) return;
+
+    // Wait for video to be playing with valid dimensions
+    if (video.readyState < 2 || !video.videoWidth) {
+      detectionFrameId = requestAnimationFrame(detect);
+      return;
+    }
+
+    // Match canvas to displayed size of the wrapper
+    const w = video.clientWidth;
+    const h = video.clientHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    let predictions;
+    try {
+      predictions = await cocoModel.detect(video);
+    } catch(e) {
+      detectionFrameId = requestAnimationFrame(detect);
+      return;
+    }
+
+    // Scale from video native resolution to canvas display size
+    const scaleX = w / video.videoWidth;
+    const scaleY = h / video.videoHeight;
+
+    // Draw only labels above 55% confidence — no bounding boxes
+    for (const pred of predictions) {
+      if (pred.score < 0.55) continue;
+
+      const [bx, by, bw, bh] = pred.bbox;
+      const cx = (bx + bw / 2) * scaleX;
+      const cy = by * scaleY;
+
+      const label = pred.class;
+      const conf  = Math.round(pred.score * 100);
+      const text  = `${label} ${conf}%`;
+
+      // Pill background
+      ctx.font = 'bold 9px "Courier New"';
+      const tw = ctx.measureText(text).width;
+      const px = 4, py = 3, r = 2;
+      const bx2 = cx - tw / 2 - px;
+      const by2 = Math.max(2, cy - 14);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.beginPath();
+      ctx.roundRect(bx2, by2, tw + px * 2, 14 + py, r);
+      ctx.fill();
+
+      // Label text
+      ctx.fillStyle = 'rgba(0,229,255,0.95)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx, by2 + 8);
+    }
+
+    // Run at ~8fps to balance accuracy and battery
+    setTimeout(() => {
+      detectionFrameId = requestAnimationFrame(detect);
+    }, 120);
+  }
+
+  detect();
+}
+
+function stopDetection() {
+  detectionRunning = false;
+  if (detectionFrameId) cancelAnimationFrame(detectionFrameId);
+  const canvas = document.getElementById('detect-canvas');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 }
 
 async function enumerateLenses() {
@@ -997,6 +1207,10 @@ async function switchLens(deviceId, btnEl) {
 
     document.querySelectorAll('.lens-btn').forEach(b => b.classList.remove('active'));
     btnEl.classList.add('active');
+
+    // Restart detection on new stream
+    stopDetection();
+    startDetection();
   } catch(e) {
     console.warn('Lens switch failed', e);
   }
@@ -1048,6 +1262,133 @@ async function wakeLock() {
     if ('wakeLock' in navigator)
       await navigator.wakeLock.request('screen');
   } catch(e) {}
+}
+
+// ═══════════════════════════════════════
+//  VOICE CONTROL
+// ═══════════════════════════════════════
+const WAKE_WORD = 'pureview';
+let recognition = null;
+let voiceEnabled = false;
+let voiceShouldRestart = false;
+
+const VOICE_COMMANDS = [
+  { keys: ['satellite', 'sat view', 'satellite view'], action: () => setMapMode('sat') },
+  { keys: ['street', 'street view', 'map view'],        action: () => setMapMode('street') },
+  { keys: ['take photo', 'photo', 'snapshot', 'take picture', 'take a photo'],
+    action: () => takeSnapshot() },
+  { keys: ['hide map', 'map off'],     action: () => setWidgetVisible('bottom-right', false) },
+  { keys: ['show map', 'map on'],      action: () => setWidgetVisible('bottom-right', true) },
+  { keys: ['hide camera', 'camera off'], action: () => setWidgetVisible('bottom-left', false) },
+  { keys: ['show camera', 'camera on'],  action: () => setWidgetVisible('bottom-left', true) },
+  { keys: ['hide time', 'time off'],   action: () => setWidgetVisible('time-block', false) },
+  { keys: ['show time', 'time on'],    action: () => setWidgetVisible('time-block', true) },
+  { keys: ['hide temp', 'temp off', 'hide temperature'], action: () => setWidgetVisible('temp-block', false) },
+  { keys: ['show temp', 'temp on', 'show temperature'],  action: () => setWidgetVisible('temp-block', true) },
+  { keys: ['hide elevation', 'elevation off'], action: () => setWidgetVisible('elev-block', false) },
+  { keys: ['show elevation', 'elevation on'],  action: () => setWidgetVisible('elev-block', true) },
+  { keys: ['hide speed', 'speed off'], action: () => setWidgetVisible('speed-block', false) },
+  { keys: ['show speed', 'speed on'],  action: () => setWidgetVisible('speed-block', true) },
+  { keys: ['open settings', 'settings'], action: () => openSettings() },
+  { keys: ['close settings'],            action: () => closeSettings() },
+];
+
+function setMapMode(mode) {
+  if (mode === mapMode) return;
+  toggleMapMode();
+}
+
+function setWidgetVisible(targetId, visible) {
+  const el = document.getElementById(targetId);
+  const btn = document.querySelector(`.s-toggle[data-target="${targetId}"]`);
+  if (!el) return;
+  el.style.display = visible ? '' : 'none';
+  if (btn) {
+    btn.classList.toggle('active', visible);
+    btn.textContent = visible ? 'ON' : 'OFF';
+  }
+}
+
+function toggleVoiceControl() {
+  if (voiceEnabled) stopVoiceControl();
+  else startVoiceControl();
+}
+
+function startVoiceControl() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showCmdToast('Voice not supported on this browser');
+    return;
+  }
+
+  voiceEnabled = true;
+  voiceShouldRestart = true;
+  document.getElementById('voice-toggle-btn').classList.add('active');
+  document.getElementById('voice-toggle-label').textContent = 'Wake word active';
+  document.getElementById('listening-indicator').classList.add('active');
+
+  recognition = new SR();
+  recognition.continuous = false; // iOS handles continuous poorly — restart manually instead
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = e => {
+    const transcript = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
+    handleVoiceTranscript(transcript);
+  };
+
+  recognition.onerror = e => {
+    // 'no-speech' and 'aborted' are normal in a restart loop — ignore silently
+  };
+
+  recognition.onend = () => {
+    if (voiceShouldRestart) {
+      // Brief delay avoids hammering iOS's speech engine
+      setTimeout(() => {
+        if (voiceShouldRestart) {
+          try { recognition.start(); } catch(e) {}
+        }
+      }, 250);
+    }
+  };
+
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopVoiceControl() {
+  voiceEnabled = false;
+  voiceShouldRestart = false;
+  document.getElementById('voice-toggle-btn').classList.remove('active');
+  document.getElementById('voice-toggle-label').textContent = 'Enable "PureView" wake word';
+  document.getElementById('listening-indicator').classList.remove('active');
+  if (recognition) {
+    try { recognition.stop(); } catch(e) {}
+  }
+}
+
+function handleVoiceTranscript(transcript) {
+  const idx = transcript.indexOf(WAKE_WORD);
+  if (idx === -1) return; // wake word not present, ignore
+
+  const after = transcript.slice(idx + WAKE_WORD.length).trim();
+  if (!after) return;
+
+  for (const cmd of VOICE_COMMANDS) {
+    if (cmd.keys.some(k => after.includes(k))) {
+      cmd.action();
+      showCmdToast(after);
+      return;
+    }
+  }
+  showCmdToast(`"${after}" — not recognized`);
+}
+
+function showCmdToast(text) {
+  const toast = document.getElementById('cmd-toast');
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(showCmdToast._t);
+  showCmdToast._t = setTimeout(() => toast.classList.remove('show'), 2200);
 }
 
 // ═══════════════════════════════════════
